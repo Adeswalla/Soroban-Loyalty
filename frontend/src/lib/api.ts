@@ -29,6 +29,7 @@ export interface Reward {
   redeemed: boolean;
   redeemed_amount: number;
   claimed_at: string;
+  campaign_reward?: number; // Associated campaign reward amount
 }
 
 export interface AnalyticsData {

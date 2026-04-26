@@ -75,6 +75,8 @@ export default function DashboardPage() {
       setMessage({ type: "success", text: t('messages.claimSuccess', { id: campaignId.toString() }) });
       const r = await api.getUserRewards(publicKey);
       setRewards(r.rewards);
+      // Trigger balance update
+      window.dispatchEvent(new Event("balanceUpdate"));
     } catch (err: unknown) {
       setMessage({ type: "error", text: err instanceof Error ? err.message : t('messages.claimFailed') });
     } finally {
@@ -92,6 +94,8 @@ export default function DashboardPage() {
       setMessage({ type: "success", text: t('messages.redeemSuccess', { amount: reward.amount.toString() }) });
       const r = await api.getUserRewards(publicKey);
       setRewards(r.rewards);
+      // Trigger balance update
+      window.dispatchEvent(new Event("balanceUpdate"));
     } catch (err: unknown) {
       setMessage({ type: "error", text: err instanceof Error ? err.message : t('messages.redeemFailed') });
     } finally {

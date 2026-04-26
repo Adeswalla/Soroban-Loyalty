@@ -18,6 +18,7 @@ const RPC_URL = process.env.NEXT_PUBLIC_SOROBAN_RPC_URL!;
 const NETWORK_PASSPHRASE = process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE!;
 const REWARDS_CONTRACT_ID = process.env.NEXT_PUBLIC_REWARDS_CONTRACT_ID!;
 const CAMPAIGN_CONTRACT_ID = process.env.NEXT_PUBLIC_CAMPAIGN_CONTRACT_ID!;
+const TOKEN_CONTRACT_ID = process.env.NEXT_PUBLIC_TOKEN_CONTRACT_ID!;
 
 const server = new SorobanRpc.Server(RPC_URL, { allowHttp: true });
 
@@ -85,6 +86,29 @@ export async function redeemReward(publicKey: string, amount: bigint) {
     new Address(publicKey).toScVal(),
     nativeToScVal(amount, { type: "i128" }),
   ]);
+}
+
+export async function getTokenBalance(publicKey: string): Promise<bigint> {
+  const account = await server.getAccount(publicKey);
+  const contract = new Contract(TOKEN_CONTRACT_ID);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call("balance", new Address(publicKey).toScVal()))
+    .setTimeout(30)
+    .build();
+
+  const simResult = await server.simulateTransaction(tx);
+  if (SorobanRpc.Api.isSimulationError(simResult)) {
+    throw new Error(`Simulation failed: ${simResult.error}`);
+  }
+
+  // The result is in simResult.result
+  const result = simResult.result!;
+  const scVal = xdr.ScVal.fromXDR(result.xdr, "base64");
+  return scVal.i128().toString() as any; // bigint
 }
 
 export async function createCampaign(

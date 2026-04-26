@@ -5,7 +5,7 @@
 import { SorobanRpc, xdr } from "@stellar/stellar-sdk";
 import { rpcServer } from "../soroban";
 import { upsertCampaign } from "../services/campaign.service";
-import { upsertReward, recordTransaction } from "../services/reward.service";
+import { claimReward, upsertReward, recordTransaction } from "../services/reward.service";
 import { pool } from "../db";
 import { logger } from "../logger";
 import { indexerLagBlocks, indexerEventsTotal } from "../metrics";
@@ -82,9 +82,18 @@ async function processEvent(event: SorobanRpc.Api.RawEventResponse): Promise<voi
     const valueVec = xdr.ScVal.fromXDR(event.value, "base64").vec()!;
     const campaignId = decodeU64(valueVec[0]);
     const amount = decodeI128(valueVec[1]);
-    await upsertReward({ user_address: user, campaign_id: campaignId, amount, redeemed: false, redeemed_amount: 0 });
-    await recordTransaction(event.txHash, "claim", user, campaignId, amount, event.ledger);
-    console.log(`[indexer] RewardClaimed user=${user} campaign=${campaignId} amount=${amount}`);
+    
+    try {
+      await claimReward(user, campaignId, amount);
+      await recordTransaction(event.txHash, "claim", user, campaignId, amount, event.ledger);
+      console.log(`[indexer] RewardClaimed user=${user} campaign=${campaignId} amount=${amount}`);
+    } catch (error) {
+      if (error.message === 'DUPLICATE_CLAIM') {
+        console.warn(`[indexer] Duplicate claim detected for user=${user} campaign=${campaignId}, skipping`);
+      } else {
+        throw error;
+      }
+    }
   }
 
   if (event.contractId === REWARDS_CONTRACT && eventName === "RWD_RDM") {

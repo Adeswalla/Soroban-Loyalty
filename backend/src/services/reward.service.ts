@@ -1,4 +1,5 @@
 import { pool } from "../db";
+import { Campaign } from "./campaign.service";
 
 export interface Reward {
   id: string;
@@ -9,38 +10,74 @@ export interface Reward {
   redeemed_amount: number;
   claimed_at: Date;
   redeemed_at?: Date;
+  campaign_reward?: number; // Associated campaign reward amount
 }
 
 /**
- * Inserts a new reward or updates an existing one for a specific user and campaign.
- * Also ensures the user exists in the users table.
+ * Claims a reward for a user and campaign. Uses SELECT FOR UPDATE within a transaction
+ * to prevent race conditions and duplicate claims under concurrent requests.
  * 
- * @param r - The reward object to upsert.
- * @returns A promise that resolves when the operation is complete.
- * @throws Will throw an error if the database query fails.
+ * @param userAddress - The Stellar public key of the user.
+ * @param campaignId - The ID of the campaign.
+ * @param amount - The reward amount.
+ * @returns A promise that resolves when the claim is recorded.
+ * @throws Will throw an error with code 'DUPLICATE_CLAIM' if reward already exists.
  */
-export async function upsertReward(r: Omit<Reward, "id" | "claimed_at">): Promise<void> {
-  // Ensure user row exists
-  await pool.query(
-    `INSERT INTO users (address) VALUES ($1) ON CONFLICT DO NOTHING`,
-    [r.user_address]
-  );
-  await pool.query(
-    `INSERT INTO rewards (user_address, campaign_id, amount, redeemed, redeemed_amount)
-     VALUES ($1,$2,$3,$4,$5)
-     ON CONFLICT (user_address, campaign_id) DO UPDATE SET
-       redeemed = EXCLUDED.redeemed,
-       redeemed_amount = EXCLUDED.redeemed_amount,
-       redeemed_at = CASE WHEN EXCLUDED.redeemed THEN NOW() ELSE rewards.redeemed_at END`,
-    [r.user_address, r.campaign_id, r.amount, r.redeemed, r.redeemed_amount]
-  );
+export async function claimReward(userAddress: string, campaignId: number, amount: number): Promise<void> {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Check for existing reward with row-level locking
+    const existing = await client.query(
+      `SELECT id FROM rewards 
+       WHERE user_address = $1 AND campaign_id = $2 
+       FOR UPDATE`,
+      [userAddress, campaignId]
+    );
+    
+    if (existing.rows.length > 0) {
+      throw new Error('DUPLICATE_CLAIM');
+    }
+    
+    // Ensure user exists
+    await client.query(
+      `INSERT INTO users (address) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [userAddress]
+    );
+    
+    // Insert the reward
+    await client.query(
+      `INSERT INTO rewards (user_address, campaign_id, amount, redeemed, redeemed_amount)
+       VALUES ($1, $2, $3, false, 0)`,
+      [userAddress, campaignId, amount]
+    );
+    
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**
  * Retrieves all rewards associated with a specific user address.
+ * Includes associated campaign data in a single JOIN query to avoid N+1 queries.
  * 
  * @param address - The Stellar public key of the user.
- * @returns A promise that resolves to an array of Reward objects.
+ * @returns A promise that resolves to an array of Reward objects with campaign data.
+ * @throws Will throw an error if the database query fails.
+ */
+/**
+ * Retrieves all rewards associated with a specific user address.
+ * Uses a single JOIN query to fetch rewards with associated campaign data,
+ * avoiding N+1 queries that would occur if campaign data was fetched separately.
+ * 
+ * @param address - The Stellar public key of the user.
+ * @returns A promise that resolves to an array of Reward objects with campaign data.
  * @throws Will throw an error if the database query fails.
  */
 export async function getRewardsByUser(address: string): Promise<Reward[]> {

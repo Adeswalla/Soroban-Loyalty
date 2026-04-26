@@ -1,5 +1,3 @@
-const withNextIntl = require('next-intl/plugin')();
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -10,7 +8,8 @@ const nextConfig = {
     NEXT_PUBLIC_NETWORK_PASSPHRASE: process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE ?? "Test SDF Network ; September 2015",
     NEXT_PUBLIC_REWARDS_CONTRACT_ID: process.env.NEXT_PUBLIC_REWARDS_CONTRACT_ID ?? "",
     NEXT_PUBLIC_CAMPAIGN_CONTRACT_ID: process.env.NEXT_PUBLIC_CAMPAIGN_CONTRACT_ID ?? "",
+    NEXT_PUBLIC_TOKEN_CONTRACT_ID: process.env.NEXT_PUBLIC_TOKEN_CONTRACT_ID ?? "",
   },
 };
 
-module.exports = withNextIntl(nextConfig);
+module.exports = nextConfig;

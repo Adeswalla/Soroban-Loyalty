@@ -6,6 +6,7 @@ import { ToastProvider } from "@/context/ToastContext";
 import { WalletConnector } from "@/components/WalletConnector";
 import { NetworkStatusIndicator } from "@/components/NetworkStatusIndicator";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { useBalance } from "@/hooks/useBalance";
 
 export function ClientShell({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +22,7 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
 
 function ShellContent({ children }: { children: React.ReactNode }) {
   const { health } = useNetworkStatus();
+  const { balance, loading } = useBalance();
 
   return (
     <>
@@ -32,6 +34,13 @@ function ShellContent({ children }: { children: React.ReactNode }) {
           <a href="/analytics">Analytics</a>
           <a href="/profile">Profile</a>
         </nav>
+        <div className="header-balance">
+          {loading ? (
+            <span className="balance-loading">Loading...</span>
+          ) : balance !== null ? (
+            <span className="balance-amount">{balance.toLocaleString()} LYT</span>
+          ) : null}
+        </div>
         <NetworkStatusIndicator health={health} />
         <WalletConnector />
       </header>

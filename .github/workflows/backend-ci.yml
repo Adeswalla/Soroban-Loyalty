@@ -56,7 +56,7 @@ jobs:
         run: psql $DATABASE_URL -f ../database/schema.sql
 
       - name: Run tests
-        run: npm test -- --ci --coverage
+        run: npm run test:coverage -- --ci
 
       - name: Upload test results
         if: always()

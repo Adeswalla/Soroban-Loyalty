@@ -5,15 +5,21 @@ import { loadSecrets } from "./secrets";
 import { campaignRouter } from "./routes/campaign.routes";
 import { rewardRouter } from "./routes/reward.routes";
 import { analyticsRouter } from "./routes/analytics.routes";
-import { startIndexer } from "./indexer/indexer";
 import { rpcServer } from "./soroban";
-import { pool } from "./db";
+import { pool, initDb } from "./db";
 import { registry, httpRequestsTotal, httpRequestDuration, dbPoolActive, dbPoolIdle, dbPoolWaiting } from "./metrics";
+import { logger, requestLogger, errorAlertMiddleware } from "./logger";
+
+// Conditionally import indexer only when not in test mode
+let startIndexer: () => Promise<void>;
+if (process.env.NODE_ENV !== "test") {
+  const indexerModule = require("./indexer/indexer");
+  startIndexer = indexerModule.startIndexer;
+}
 
 // Load .env first (no-op in production where env vars are injected),
 // then fetch secrets from AWS Secrets Manager before any other init.
 dotenv.config();
-await loadSecrets();
 
 const app = express();
 app.use(cors());
@@ -100,11 +106,18 @@ process.on("uncaughtException", (err) => {
 
 const PORT = process.env.PORT ?? 3001;
 
-app.listen(PORT, async () => {
-  logger.info(`Server listening on port ${PORT}`);
-  if (process.env.ENABLE_INDEXER !== "false") {
-    await startIndexer();
-  }
-});
-
 export default app;
+
+// Only start server if not in test mode
+if (require.main === module && process.env.NODE_ENV !== "test") {
+  (async () => {
+    await loadSecrets();
+    await initDb();
+    app.listen(PORT, async () => {
+      logger.info(`Server listening on port ${PORT}`);
+      if (process.env.ENABLE_INDEXER !== "false" && startIndexer) {
+        await startIndexer();
+      }
+    });
+  })();
+}
